@@ -1,0 +1,227 @@
+
+
+write_model_M <- function() {
+  modelpath <- "./code/models/model.txt"
+
+  # start a model text file with "model{" in it
+  cat(
+    "
+      model {",
+    sep = "",
+    append = FALSE,
+    file = modelpath,
+    fill = TRUE
+  )
+
+  # add any additional model info XXXX using
+  #cat("XXX", sep="", append = TRUE, file = modelpath, fill=TRUE)
+
+  # data model
+  cat(
+    "
+    for(i in 1:npre09){
+      logy_i[i] ~ dnorm(log(sum(p_atc[geta_i[i], gett_i[i], getallc_imatrix[i, 1:getlengthc_i[i]]])), tau_i[i])
+    }
+    for(i in (npre09+1):n){
+      logy_i[i] ~ dnorm(log_p_atc[geta_i[i], gett_i[i], getallc_imatrix[i, 1:getlengthc_i[i]]], tau_i[i])
+    }
+    
+    for(j in 1:mpre09) {
+      mig_in_j[j] ~ dnorm(sum(psi_atc[geta_j[j], gett_j[j], getallc_jmatrix[j, 1:getlengthc_j[j]]]), tau_mig_in[j])
+      mig_out_j[j] ~ dnorm(sum(nu_atc[geta_j[j],gett_j[j], getallc_jmatrix[j, 1:getlengthc_j[j]]]), tau_mig_out[j])
+    }
+    for(j in (mpre09+1):m) {
+      mig_in_j[j] ~ dnorm(psi_atc[geta_j[j], gett_j[j], getallc_jmatrix[j, 1:getlengthc_j[j]]], tau_mig_in[j])
+      mig_out_j[j] ~ dnorm(nu_atc[geta_j[j],gett_j[j], getallc_jmatrix[j, 1:getlengthc_j[j]]], tau_mig_out[j])
+    }
+      ",
+    sep = "",
+    append = TRUE,
+    file = modelpath,
+    fill = TRUE
+  )
+
+
+  # process model bulk
+  cat(
+    "
+  for(t in 1:nyears){
+    log_firstage_t[t] ~ dnorm(log_wpp_at[1,t], tau_wpp_at)
+    firstage_t[t] <- exp(log_firstage_t[t])
+  }
+  for(a in 2:nage_groups){
+    log_firstyear_a[a] ~ dnorm(log_wpp_at[a,1], tau_wpp_at)
+    firstyear_a[a] <- exp(log_firstyear_a[a])
+  }
+  for(c in 1:ncounties){
+      
+    for(t in 1:nyears){
+      # first age group all years of p and phi
+      ex_log_p_atc[1, t, c] ~ dnorm(log(prop_atc[1,t,c])+log_firstage_t[t], 1/0.01^2)
+      ex_p_atc[1, t, c] <- exp(ex_log_p_atc[1, t, c])
+      log_p_atc[1, t, c] <- ex_log_p_atc[1, t, c] + log(1+phi_atc[1,t,c])+ eps_atc[1,t,c]
+      p_atc[1, t, c] <- exp(log_p_atc[1, t, c]) 
+      
+      
+      #mortality
+      qx_atc[1, t,c] <-  exp(alpha0[c] + beta0[c]*ax[1]+ beta[t,c,1]*Y_ad[1,1]+ beta[t,c,2]*Y_ad[1,2] )/(1+ exp(alpha0[c] + beta0[c]*ax[1]+ beta[t,c,1]*Y_ad[1,1] + beta[t,c,2]*Y_ad[1,2] ))
+      
+      # migration
+      phi_atc[1,t,c] <- 0
+      psi_atc[1,t,c] <- Psi_tc[t,c]*A_in_ac[1,c]
+      nu_atc[1,t,c] <- Nu_tc[t,c]*A_out_ac[1,c]
+    }
+
+
+    for(a in 2:nage_groups){
+    # first year remaining ages for p and phi
+      ex_log_p_atc[a,1,c] ~ dnorm(log(prop_atc[a,1,c])+log_firstyear_a[a], 1/0.01^2) 
+      ex_p_atc[a,1,c] <- exp(ex_log_p_atc[a,1,c])
+      log_p_atc[a, 1, c] <- ex_log_p_atc[a,1,c] + log(1+phi_atc[a,1,c]) + eps_atc[a,1,c]
+      p_atc[a,1,c] <- exp(log_p_atc[a,1,c])
+  
+      #mortality
+      qx_atc[a, 1,c] <-  exp( alpha0[c] + beta0[c]* ax[a] + beta[1,c,1]*Y_ad[a,1]+ beta[1,c,2]*Y_ad[a,2])/(1+exp(alpha0[c] + beta0[c]*ax[a] + beta[1,c,1]*Y_ad[a,1]+ beta[1,c,2]*Y_ad[a,2]))
+      
+      # migration
+      phi_atc[a,1,c] <- 0
+      psi_atc[a,1,c] <- Psi_tc[1,c]*A_in_ac[a,c]
+      nu_atc[a,1,c] <- Nu_tc[1,c]*A_out_ac[a,c]
+      
+      # model for true population
+      for(t in 2:nyears){
+        ex_log_p_atc[a,t,c] <- log(p_atc[a-1, t-1, c]*(1 - qx_atc[a-1,t-1,c])) 
+        ex_p_atc[a,t,c] <- exp(ex_log_p_atc[a,t,c])
+        log_p_atc[a,t,c] <- ex_log_p_atc[a,t,c] + log(1+phi_atc[a,t,c]) + eps_atc[a,t,c]
+        p_atc[a,t,c] <- exp(log_p_atc[a,t,c]) 
+
+        # mortality
+        qx_atc[a, t,c] <-  exp( alpha0[c] + beta0[c]*ax[a] + beta[t,c,1]*Y_ad[a,1]+ beta[t,c,2]*Y_ad[a,2])/(1+ exp( alpha0[c] + beta0[c]*ax[a] + beta[t,c,1]*Y_ad[a,1]+ beta[t,c,2]*Y_ad[a,2])) #inverse logit to bound between 0 and 1
+
+        
+        # migration
+        phi_atc[a,t,c] <- (psi_atc[a,t,c] - nu_atc[a,t,c])/p_atc[a-1,t-1,c]
+        psi_atc[a,t,c] <- Psi_tc[t,c]*A_in_ac[a,c]
+        nu_atc[a,t,c] <- min(Nu_tc[t,c]*A_out_ac[a,c], p_atc[a-1, t-1, c])
+        
+
+      } # end time
+      
+    } # end main age loop
+
+    # migration
+
+      for(a in 1:nage_groups){
+       A_in_raw_ac[a,c] ~ dunif(0,1)
+       A_in_ac[a,c]  = A_in_raw_ac[a,c]/(sum(A_in_raw_ac[1:nage_groups,c]))
+       A_out_raw_ac[a,c] ~ dunif(0,1) 
+       A_out_ac[a,c]  = A_out_raw_ac[a,c]/(sum(A_out_raw_ac[1:nage_groups,c]))
+      }
+
+      
+      Psi_tc[1,c] ~ dnorm(0, 0.01)T(0,)
+      Nu_tc[1,c] ~ dnorm(0, 0.01)T(0,)
+
+
+      Psi_tc[2,c] ~ dnorm(Psi_tc[1,c], tau_psi)T(0,)
+      Nu_tc[2,c] ~ dnorm(Nu_tc[1,c], tau_nu)T(0,)
+
+
+        for(t in 3:(nyears)){
+          # migration: total in and out
+          Psi_tc[t,c] ~ dnorm(2*Psi_tc[t-1,c] - Psi_tc[t-2,c], tau_psi)T(0,)
+          Nu_tc[t,c] ~ dnorm(2*Nu_tc[t-1,c] - Nu_tc[t-2,c], tau_nu)T(0,)
+        }
+      
+
+    # model for betas
+    for(d in 1:2){
+    delta[1,c,d] ~ dnorm(0,tau_delta[d])
+    beta[1,c,d] <- beta_nat[1,d] + delta[1,c,d]
+      for(t in 2:nyears){
+          beta[t,c,d] <- beta_nat[t,d] + delta[t,c,d]
+          delta[t,c,d] ~ dnorm(delta[t-1,c,d],tau_delta[d])
+      }
+    }
+    
+    alpha0[c] <- 0 
+    beta0[c] <- 1
+
+  # epsilons
+  
+   for(t in 1:nyears){
+       eps_atc[1:nage_groups,t,c] = Dcomb%*%delta_eps[1:(nage_groups-1),t,c]
+       for(k in 1:(nage_groups-1)){
+         delta_eps[k,t,c] ~ dnorm(0, tau_delta_eps)
+       }
+   }
+  } # end main county loop
+
+   ",
+    sep = "",
+    append = TRUE,
+    file = modelpath,
+    fill = TRUE
+  )
+  # wpp constraints
+  cat(
+    "
+
+ # constraints
+    # total pop
+  for(a in 1:nage_groups){
+    for(y in 1:(nwppyears)){
+      x_at[a,y] ~ dinterval(p_at[a, y], lu_at[a, y,])
+      p_at[a,y] <- sum(p_atc[a,y,])
+      log_lu_at[a, y,1] ~ dnorm(log_wpp_atb[a, y ,1], 100)T(,log_wpp_at[a, y])
+      log_lu_at[a, y,2] ~ dnorm(log_wpp_atb[a, y ,2], 100)T(log_wpp_at[a, y],)
+      lu_at[a, y,1] <- exp(log_lu_at[a, y,1])
+      lu_at[a, y,2] <- exp(log_lu_at[a, y,2])
+      
+      x_mig_at[a,y] ~ dinterval(diff_at[a,y], lu_mig_at[a, y,])
+      diff_at[a,y] <- sum(psi_atc[a,y,]) - sum(nu_atc[a,y,])
+      lu_mig_at[a,y,1] <- -0.01*p_at[a, y]
+      lu_mig_at[a,y,2] <- 0.01*p_at[a, y]
+    }
+  }
+  ",
+    sep = "",
+    append = TRUE,
+    file = modelpath,
+    fill = TRUE
+  )
+ #variances
+  cat(
+    "
+
+  tau_psi <- 0.1
+  tau_nu <- 0.1
+  tau_alpha <- pow(sigma_alpha, -2)
+  sigma_alpha ~ dnorm(0,1)T(0,)
+  tau_delta_eps <- 1000
+  tau_delta[1] <- 100
+  tau_delta[2] <- 100
+  
+      ",
+    sep = "",
+    append = TRUE,
+    file = modelpath,
+    fill = TRUE
+  )
+
+
+
+  #closing bracket for the model
+  cat(
+    "
+      }  #end model
+      ",
+    sep = "",
+    append = TRUE,
+    file = modelpath,
+    fill = TRUE
+  )
+
+  return(modelpath)
+
+} # end function
